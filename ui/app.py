@@ -104,13 +104,13 @@ with st.sidebar:
     st.markdown("## 🚀 Quick Demo")
     st.caption("No repo in mind? Try one of these:")
 
-    if st.button("Try on Flask", width="stretch"):
+    if st.button("Try on Flask", use_container_width=True):
         st.session_state.pending_demo_url = "https://github.com/pallets/flask"
         _trigger_run = True
-    if st.button("Try on FastAPI", width="stretch"):
+    if st.button("Try on FastAPI", use_container_width=True):
         st.session_state.pending_demo_url = "https://github.com/tiangolo/fastapi"
         _trigger_run = True
-    if st.button("Try on Requests", width="stretch"):
+    if st.button("Try on Requests", use_container_width=True):
         st.session_state.pending_demo_url = "https://github.com/psf/requests"
         _trigger_run = True
 
