@@ -1,0 +1,13 @@
+{
+  "expected_keys": [
+    "code_quality",
+    "dependency",
+    "git_history",
+    "weighted_base",
+    "penalty_missing_tests",
+    "penalty_critical_vulnerabilities",
+    "penalty_stale_commit_activity",
+    "penalty_total",
+    "overall"
+  ]
+}
