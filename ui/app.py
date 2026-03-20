@@ -546,7 +546,7 @@ if st.session_state.report_state:
             st.info("No history found yet for this repository.")
         elif len(history_records) == 1:
             st.info("Run again later to see trend")
-            st.dataframe(history_records, width="stretch")
+            st.dataframe(history_records, use_container_width=True)
         else:
             history_df = pd.DataFrame(history_records)
             chart_df = history_df[["timestamp", "overall_score"]].copy()
@@ -570,7 +570,7 @@ if st.session_state.report_state:
             else:
                 st.info("Score stayed the same since last scan")
 
-            st.dataframe(history_records, width="stretch")
+            st.dataframe(history_records, use_container_width=True)
 
     with tab_timeline:
         st.caption("A timeline of what each analysis step did.")
@@ -599,7 +599,7 @@ if st.session_state.report_state:
                     }
                 )
 
-            st.dataframe(timeline_rows, width="stretch")
+            st.dataframe(timeline_rows, use_container_width=True)
 
             if token_rows > 0:
                 # Lightweight estimate, blended across free/low-cost models.
