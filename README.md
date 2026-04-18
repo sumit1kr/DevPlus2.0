@@ -1,4 +1,8 @@
 # DevPulse - Multi-Agent Code Review System (Option B)
+![Python](https://img.shields.io/badge/Python-3.11-blue)
+![LangGraph](https://img.shields.io/badge/LangGraph-0.2.40-green)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.38-red)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ## Overview
 DevPulse analyzes a GitHub repository or pull request and produces a structured technical health report.
@@ -161,7 +165,7 @@ Optional environment variables:
 - `GITHUB_TOKEN` (recommended for higher API limits)
 - `GROQ_API_KEY` or `GEMINI_API_KEY` (for LLM-backed report writing/follow-up)
 
-## Proof
+## Screenshots
 
 **Fig 1**
 
