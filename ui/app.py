@@ -12,11 +12,12 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+from agents.meta_controller_agent import run_meta_controller
 from graph.devpulse_graph import build_graph
-from state.state import default_state
 from tools.history_store import load_scan_history, save_scan_result
 from tools.report_builder import build_report
 from tools.runtime_config import load_runtime_config
+from tools.scoring import SCORE_WEIGHTS
 
 
 loaded_keys = load_runtime_config()
@@ -154,8 +155,11 @@ if run_btn or _trigger_run:
                     f"Running demo audit on {repo_url.split('/')[-1]}... "
                     "This takes about 30 seconds."
                 )
-            init_state = default_state(repo_url=repo_url.strip(), scan_depth=scan_depth)
-            result = st.session_state.graph.invoke(init_state)
+            result = run_meta_controller(
+                repo_url=repo_url.strip(),
+                scan_depth=scan_depth,
+                report_graph=st.session_state.graph,
+            )
             owner = str(result.get("owner", "")).strip()
             repo = str(result.get("repo", "")).strip()
             score_breakdown = result.get("score_breakdown", {})
@@ -176,6 +180,9 @@ if st.session_state.report_state:
     warnings = result.get("warnings", [])
     pr_risk_summary = result.get("pr_risk_summary", {})
     pr_review_checklist = result.get("pr_review_checklist", [])
+    routing_plan = result.get("routing_plan", [])
+    routing_decision = result.get("routing_decision", [])
+    meta_loop_trace = result.get("meta_loop_trace", [])
     run_trace = result.get("run_trace", [])
     owner = str(result.get("owner", "")).strip()
     repo = str(result.get("repo", "")).strip()
@@ -335,6 +342,9 @@ if st.session_state.report_state:
         "pr_dependency_delta": result.get("pr_dependency_delta", {}),
         "pr_risk_summary": pr_risk_summary,
         "pr_review_checklist": pr_review_checklist,
+        "routing_plan": routing_plan,
+        "routing_decision": routing_decision,
+        "meta_loop_trace": meta_loop_trace,
         "run_trace": run_trace,
         "code_quality_result": result.get("code_quality_result", {}),
         "dependency_result": result.get("dependency_result", {}),
@@ -382,6 +392,19 @@ if st.session_state.report_state:
         st.caption("Quick summary of what matters most and what to fix first.")
         st.subheader("Final Summary")
         st.markdown(result.get("final_report", "No report generated."))
+        st.subheader("Agentic Routing Decision")
+        st.caption("Why each specialist agent was enabled or skipped for this run.")
+        if routing_plan:
+            for item in routing_plan:
+                enabled = bool(item.get("enabled", False))
+                marker = "Enabled" if enabled else "Skipped"
+                icon = "✅" if enabled else "⏭️"
+                agent = str(item.get("agent", "unknown"))
+                reason = str(item.get("reason", "No rationale recorded."))
+                st.markdown(f"- {icon} **{agent}**: {marker}. {reason}")
+            st.caption(f"Execution targets: {', '.join(routing_decision) if routing_decision else 'none'}")
+        else:
+            st.info("Routing rationale was not captured for this run.")
         if result.get("analysis_mode") == "pr":
             st.subheader("PR Risk Summary")
             st.caption("How risky this pull request looks before merge.")
@@ -398,9 +421,26 @@ if st.session_state.report_state:
 
         # Visual score bars
         _score_items = [
-            ("Code Quality", score_breakdown.get("code_quality", 0), "45% weight"),
-            ("Dependency Risk", score_breakdown.get("dependency", 0), "35% weight"),
-            ("Git Health", score_breakdown.get("git_history", 0), "20% weight"),
+            (
+                "Code Quality",
+                score_breakdown.get("code_quality", 0),
+                f"{int(SCORE_WEIGHTS['code_quality'] * 100)}% weight",
+            ),
+            (
+                "Dependency Risk",
+                score_breakdown.get("dependency", 0),
+                f"{int(SCORE_WEIGHTS['dependency'] * 100)}% weight",
+            ),
+            (
+                "Git Health",
+                score_breakdown.get("git_history", 0),
+                f"{int(SCORE_WEIGHTS['git_history'] * 100)}% weight",
+            ),
+            (
+                "Security",
+                score_breakdown.get("security", 0),
+                f"{int(SCORE_WEIGHTS['security'] * 100)}% weight",
+            ),
         ]
         for _label, _val, _weight in _score_items:
             _col_label, _col_bar, _col_val = st.columns([2, 5, 1])
@@ -575,6 +615,17 @@ if st.session_state.report_state:
     with tab_timeline:
         st.caption("A timeline of what each analysis step did.")
         st.subheader("Run Timeline")
+        if meta_loop_trace:
+            st.subheader("Meta-Agent Loop (Thought -> Action -> Observation)")
+            for row in meta_loop_trace:
+                title = f"Loop Step {row.get('step', '?')}"
+                with st.expander(title):
+                    st.markdown(f"**Thought:** {row.get('thought', '')}")
+                    st.markdown("**Action:**")
+                    st.json(row.get("action", {}))
+                    st.markdown("**Observation:**")
+                    st.json(row.get("observation", {}))
+
         if not run_trace:
             st.info("No timeline data available for this run.")
         else:

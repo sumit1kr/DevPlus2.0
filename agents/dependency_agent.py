@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed
 
 from state.state import AgentResult, DevPulseState
 from tools.trace_logger import TraceLogger
@@ -86,13 +87,28 @@ def run_dependency_analysis(state: DevPulseState) -> DevPulseState:
     vulnerable = []
     query_count = 0
     trace.add_tool_call("osv_query_plan", {"target_count": len(deps_for_vuln_scan), "budget": max_osv_queries})
-    for dep in deps_for_vuln_scan:
-        if query_count >= max_osv_queries or time.monotonic() >= deadline:
-            break
-        vulns = query_osv(dep["ecosystem"], dep["name"], dep.get("version", ""))
-        query_count += 1
-        if vulns:
-            vulnerable.append({"dependency": dep, "vulns": vulns})
+    scan_targets = deps_for_vuln_scan[: max(0, max_osv_queries)]
+    if scan_targets and time.monotonic() < deadline:
+        max_workers = min(8, len(scan_targets))
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(query_osv, dep["ecosystem"], dep["name"], dep.get("version", "")): dep
+                for dep in scan_targets
+            }
+            remaining_seconds = max(0.01, deadline - time.monotonic())
+            try:
+                for future in as_completed(futures, timeout=remaining_seconds):
+                    dep = futures[future]
+                    query_count += 1
+                    try:
+                        vulns = future.result()
+                    except Exception:
+                        vulns = []
+                    if vulns:
+                        vulnerable.append({"dependency": dep, "vulns": vulns})
+            except TimeoutError:
+                # Respect time budget and continue with completed results.
+                pass
 
     warnings = list(state.get("warnings", []))
     if unresolved_files:

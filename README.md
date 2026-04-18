@@ -1,265 +1,183 @@
----
-title: DevPulse
-sdk: streamlit
-sdk_version: 1.38.0
-app_file: ui/app.py
----
+# Title
+DevPulse - Multi-Agent Code Review System (Option B)
 
-# DevPulse: AI Code Review and Technical Debt Analyst
+## Overview
+DevPulse analyzes a GitHub repository or pull request and produces a structured technical health report.
+It combines code quality, dependency risk, security pattern checks, and git activity signals.
+The output includes scores, findings, routing rationale, and downloadable Markdown/JSON reports.
 
-![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
-![LangGraph](https://img.shields.io/badge/LangGraph-Multi--Agent-success)
-![License](https://img.shields.io/badge/License-MIT-green)
-![LangSmith](https://img.shields.io/badge/LangSmith-Tracing%20Optional-orange)
+## Problem Statement
+Code review decisions are often based on fragmented signals from different tools.
+Reviewers need a quick way to understand whether a repository or PR is low risk or needs attention.
+Manual consolidation is slow and inconsistent, especially under time constraints.
+This project provides one consolidated report from a single workflow run.
 
-## 🚀 Short Description
-DevPulse is a LangGraph-based multi-agent AI system that reviews any GitHub repository or PR and generates a technical health report.
+## Problem to Solution Mapping
+- Problem: Signals are split across tools, so reviewers do manual consolidation.
+  What we built: One workflow that combines code quality, dependency, security, and git-health checks into one report.
+- Problem: Review decisions are slow when data collection is manual.
+  What we built: A fetcher + router + specialist-agent flow that automates collection and analysis.
+- Problem: Teams need faster go/no-go insight for repos and PRs.
+  What we built: A weighted score, prioritized findings, and recommendations in JSON/Markdown output.
+- Problem: One-pass scans can miss context in partial coverage situations.
+  What we built: A lightweight meta-controller loop that can refine scan depth based on observations.
 
-It combines code quality, security, dependency risk, and git activity analysis into one clear score with actionable recommendations.
+## Approach
+The system uses a LangGraph workflow with specialized agents for each analysis area.
+A lightweight meta-controller wraps the graph and runs an iterative loop: Thought -> Action -> Observation -> optional refinement -> Final.
+Refinement is heuristic-driven (based on coverage/warnings), not LLM planning.
 
-## 🎯 What Problem It Solves
-Developers and teams often use multiple tools to understand project health. That takes time and still misses the full picture.
+## Architecture Overview
+- Orchestration: LangGraph coordinates fetch, route, specialist agents, aggregation, and report writing.
+- Modular agents:
+  - `fetcher`: collects repo/PR context
+  - `router`: enables/skips agents based on repository signals
+  - `security`, `code_quality`, `dependency`, `git_history`: domain analyses
+  - `aggregator`: validates and merges outputs, computes weighted score and penalties
+  - `report_writer`: generates report text and follow-up responses
+- Meta-controller:
+  - Calls the graph as a tool
+  - Logs `thought`, `action`, `observation` steps
+  - Optionally reruns with higher scan depth when coverage is limited
 
-DevPulse solves this by giving a single, structured audit report with:
-
-- Overall health score
-- Priority findings with evidence
-- Recommended next actions
-- Follow-up Q&A for deeper understanding
-
-## 🖼️ Demo
-Add your screenshot or GIF here:
-
-![DevPulse Demo](assets/demo.gif)
-
-If you do not have media yet, keep this placeholder and replace it later.
-
-## 🧠 Architecture Overview
-DevPulse runs as a conditional LangGraph workflow:
-
-1. Fetcher collects repository/PR metadata, file index, sampled file contents, dependency files, and commit samples.
-2. Router decides which specialist agents should run based on repository context.
-3. Specialists run in parallel where possible.
-4. Aggregator merges all results and computes final scoring.
-5. Report Writer generates a professional Markdown report.
-6. Follow-up agent answers user questions using generated context.
-
-### Flow (Text)
-
-		Input URL (Repo or PR)
-			-> Fetcher
-			-> Conditional Router
-					-> Security Agent
-					-> Code Quality Agent (if Python files found)
-					-> Dependency Agent (if manifest files found)
-					-> Git History Agent (repo mode only)
-			-> Aggregator
-			-> Report Writer
-			-> End
-
-## 🕸️ Mermaid Graph Diagram
-```mermaid
-graph TD
-		A[User Input: GitHub Repo or PR URL] --> B[Fetcher]
-		B --> C{Route After Fetch}
-
-		C --> D[Security Agent]
-		C --> E[Code Quality Agent]
-		C --> F[Dependency Agent]
-		C --> G[Git History Agent]
-		C --> H[Aggregator]
-
-		D --> H
-		E --> H
-		F --> H
-		G --> H
-
-		H --> I[Report Writer]
-		I --> J[Final Report]
-```
-
-## ✨ Features
-- Multi-agent LangGraph orchestration with conditional routing
-- Parallel specialist analysis for faster audits
-- Unified score with category breakdown and issue severity
-- Security checks and dependency vulnerability analysis (OSV)
-- Code complexity analysis for Python projects
-- Git activity and commit hygiene insights
-- Downloadable Markdown and JSON reports
-- Follow-up Q&A chat on top of scan results
-- Runtime profile and scan coverage visibility
-
-## 🧰 Tech Stack
-- Agent Framework: LangGraph, LangChain
-- LLMs: Groq (Llama 3.3 70B), Gemini 1.5 Flash (fallback)
-- APIs/Tools: GitHub REST API, OSV API, Radon
-- Frontend: Streamlit
-- Language: Python 3.11+
-- Testing: Pytest + smoke tests
-- CI: GitHub Actions
-
-## 📁 Project Structure
+## System Flow (Diagram)
 ```text
-devpluse/
-├─ agents/
-│  ├─ fetcher_agent.py
-│  ├─ security_agent.py
-│  ├─ code_quality_agent.py
-│  ├─ dependency_agent.py
-│  ├─ git_history_agent.py
-│  ├─ aggregator_node.py
-│  └─ report_writer_agent.py
-├─ graph/
-│  └─ devpulse_graph.py
-├─ state/
-│  └─ state.py
-├─ tools/
-│  ├─ llm_router.py
-│  ├─ github_tools.py
-│  ├─ osv_tools.py
-│  ├─ report_builder.py
-│  ├─ history_store.py
-│  └─ runtime_config.py
-├─ ui/
-│  └─ app.py
-├─ tests/
-├─ .github/workflows/ci.yml
-├─ requirements.txt
-├─ smoke_test.py
-└─ README.md
++----------------------------------+
+| User Input (Repo or PR URL)      |
++----------------------------------+
+    |
+    v
++----------------------------------+
+| Meta Controller                  |
+| Thought -> Action -> Observation |
+| Optional refinement              |
++----------------------------------+
+    |
+    v
++----------------------------------+
+| DevPulse Graph (LangGraph)       |
+|  +----------------------------+  |
+|  | Fetcher                    |  |
+|  | Router (conditional)       |  |
+|  | Security Agent             |  |
+|  | Code Quality Agent         |  |
+|  | Dependency Agent           |  |
+|  | Git History Agent          |  |
+|  | Aggregator                 |  |
+|  | Report Writer              |  |
+|  +----------------------------+  |
++----------------------------------+
+    |
+    v
++----------------------------------+
+| Final Output                     |
+| UI View + JSON/Markdown export   |
++----------------------------------+
 ```
 
-## ✅ Prerequisites
-- Python 3.11 or higher
-- Git installed
-- Internet access for GitHub and OSV APIs
-- API keys (at least one LLM key):
-	- GROQ_API_KEY or GEMINI_API_KEY
-	- GITHUB_TOKEN (recommended to avoid rate limits)
+## Workflow
+1. User submits a GitHub repository URL or PR URL.
+2. Meta-controller starts a baseline graph run.
+3. Router conditionally enables specialist agents.
+4. Enabled agents execute analysis and produce structured results.
+5. Aggregator validates outputs, applies scoring and penalties, and ranks findings.
+6. Meta-controller observes coverage/warnings and may run one refinement pass.
+7. Report writer produces the final report for UI display and export.
 
-## ⚙️ Installation
+## Key Features
+- Conditional multi-agent routing based on repository context.
+- Integrated external tools: GitHub API and OSV vulnerability API.
+- Static analysis support through Radon (Python complexity) and security pattern checks.
+- Weighted scoring with explicit penalty breakdown.
+- Structured output including findings, scores, routing rationale, and execution traces.
+- Iterative controller trace with visible `thought`, `action`, and `observation` logs.
+- Exportable Markdown and JSON reports.
+
+## Example Output
+```json
+{
+  "score_breakdown": {
+    "code_quality": 72,
+    "dependency": 80,
+    "git_history": 68,
+    "security": 75,
+    "weighted_base": 74,
+    "overall": 66
+  },
+  "top_findings": [
+    {
+      "title": "Vulnerability in requests",
+      "severity": "high"
+    }
+  ],
+  "meta_loop_trace": [
+    {
+      "step": 1,
+      "thought": "Start baseline analysis",
+      "action": {"tool": "devpulse_graph.invoke", "scan_depth": 30},
+      "observation": {"source_coverage_ratio": 0.58, "warnings_count": 1}
+    },
+    {
+      "step": 2,
+      "thought": "Refine due to limited coverage",
+      "action": {"tool": "devpulse_graph.invoke", "scan_depth": 45},
+      "observation": {"source_coverage_ratio": 0.79, "warnings_count": 0}
+    }
+  ]
+}
+```
+
+## Limitations
+- The meta-controller is heuristic-driven; it is not a general autonomous planner.
+- Code quality analysis currently focuses on Python complexity signals.
+- Security analysis relies on pattern matching and can produce false positives/negatives.
+- Large repositories may be partially scanned due to scan-depth and API budget constraints.
+- External API availability/rate limits can affect completeness.
+
+## What's Next
+- Limitation to address first: The meta-controller currently decides refinement using fixed heuristics (coverage and warning thresholds).
+- Improvement planned: Add a configurable refinement policy with per-repo profiles and measurable stop criteria, so refinement decisions are more reliable and auditable without claiming full autonomous planning.
+
+## How to Run
 ```bash
 git clone <your-repo-url>
-cd devpluse
+cd lumiq
 python -m venv .venv
 ```
 
-### Windows
+Windows (PowerShell):
 ```powershell
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env
-```
-
-### Linux or macOS
-```bash
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-```
-
-Then open .env and add your API keys.
-
-## 🔐 Environment Variables
-| Key | Description | Required |
-|---|---|---|
-| GROQ_API_KEY | Primary LLM provider key used by router | Optional (recommended if Gemini not set) |
-| GEMINI_API_KEY | Fallback LLM provider key | Optional (recommended if Groq not set) |
-| GITHUB_TOKEN | GitHub API token for higher rate limits | Optional (strongly recommended) |
-| LANGCHAIN_TRACING_V2 | Enable LangSmith tracing when set to true | Optional |
-| LANGCHAIN_API_KEY | LangSmith API key for trace upload | Optional |
-| LANGCHAIN_PROJECT | LangSmith project name | Optional |
-
-## ▶️ Usage
-Run the Streamlit app locally:
-
-```powershell
 streamlit run ui/app.py
 ```
 
-App URL:
-
-```text
-http://localhost:8501
+Linux/macOS:
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+streamlit run ui/app.py
 ```
 
-### Sample Workflow
-1. Paste repository URL, for example: https://github.com/pallets/flask
-2. Set scan depth.
-3. Click Run Health Check.
-4. Review score, findings, and recommendations.
-5. Download report as Markdown or JSON.
+Optional environment variables:
+- `GITHUB_TOKEN` (recommended for higher API limits)
+- `GROQ_API_KEY` or `GEMINI_API_KEY` (for LLM-backed report writing/follow-up)
 
-### Sample Output (Short)
-```text
-Overall Health Score: 78/100
-Risk Level: Medium
-Top Findings:
-1) High cyclomatic complexity in selected Python modules
-2) Outdated dependencies with known CVEs
-3) Inconsistent commit message quality
-```
+## Proof
 
-## 🧩 Graph Nodes Explanation
-| Node Name | Role | Description |
-|---|---|---|
-| fetcher | Data collection | Parses repo/PR URL, fetches metadata, file index, sampled file contents, dependency files, commit samples |
-| security | Security analysis | Runs security-focused checks and returns security findings |
-| code_quality | Code analysis | Uses complexity heuristics and code signals to detect maintainability risks |
-| dependency | Dependency analysis | Parses manifest files and queries OSV for vulnerable packages |
-| git_history | Team/process analysis | Evaluates commit activity and commit message quality trends |
-| aggregator | Result synthesis | Validates/merges specialist outputs and computes score breakdown |
-| report_writer | Report generation | Builds final professional Markdown report with recommendations |
-| followup | Q&A | Answers user follow-up questions using report context |
+**Fig 1**
 
-## 📈 LangSmith Tracing
-DevPulse can be traced with LangSmith for debugging and observability.
+![Fig 1](f1.png)
 
-Add these keys to .env:
+**Fig 2**
 
-```env
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=your_langsmith_key
-LANGCHAIN_PROJECT=DevPulse
-```
+![Fig 2](f2.png)
 
-Then run the app normally. Open your LangSmith dashboard to view traces.
+**Fig 3**
 
-## 🤝 Contributing
-1. Fork the repository.
-2. Create a feature branch.
-3. Make your changes with clear commit messages.
-4. Run tests before opening PR.
-5. Submit pull request with summary and screenshots if UI changed.
+![Fig 3](f3.png)
 
-Run checks:
+**Fig 4**
 
-```powershell
-pytest
-python smoke_ci.py
-python smoke_test.py
-```
-
-## 📜 License
-This project is licensed under the MIT License.
-
-## 👨‍💻 Author
-- Name: Sumit Kumar
-- GitHub: https://github.com/DevPlus
-- LinkedIn: https://www.linkedin.com/in/sumit-kumar-45b39b29b/
-
-## 🧪 .env.example (Sample)
-```env
-# Required for better GitHub API limits
-GITHUB_TOKEN=
-
-# At least one LLM key recommended
-GROQ_API_KEY=
-GEMINI_API_KEY=
-
-# Optional LangSmith tracing
-LANGCHAIN_TRACING_V2=false
-LANGCHAIN_API_KEY=
-LANGCHAIN_PROJECT=DevPulse
-```
+![Fig 4](f4.png)
 

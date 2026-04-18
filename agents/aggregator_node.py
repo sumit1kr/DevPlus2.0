@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 from state.state import DevPulseState
 from tools.agent_result_validator import validate_agent_result
+from tools.scoring import SCORE_WEIGHTS, compute_weighted_base
 from tools.trace_logger import TraceLogger
 
 
@@ -101,12 +102,7 @@ def run_aggregator(state: DevPulseState) -> DevPulseState:
         "security": _safe_score(sec.get("risk_level", "medium")),
     }
 
-    weighted_score = int(
-        score_breakdown["code_quality"] * 0.30
-        + score_breakdown["dependency"] * 0.30
-        + score_breakdown["git_history"] * 0.20
-        + score_breakdown["security"] * 0.20
-    )
+    weighted_score = compute_weighted_base(score_breakdown)
 
     findings = _collect_findings(state)
     findings.sort(
@@ -118,6 +114,7 @@ def run_aggregator(state: DevPulseState) -> DevPulseState:
 
     score_breakdown_payload = {
         **score_breakdown,
+        "weights": SCORE_WEIGHTS,
         "weighted_base": weighted_score,
         "penalty_missing_tests": penalties["missing_tests"],
         "penalty_critical_vulnerabilities": penalties["critical_vulnerabilities"],

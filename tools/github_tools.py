@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
 
@@ -156,39 +157,72 @@ def fetch_file_content_at_ref(owner: str, repo: str, path: str, ref: str) -> str
 
 
 def fetch_key_files(owner: str, repo: str, files_index: List[Dict[str, Any]], max_source_files: int = 30) -> Dict[str, str]:
-    file_map: Dict[str, str] = {}
-    source_count = 0
-    docs_count = 0
+    dependency_names = {
+        "requirements.txt",
+        "pyproject.toml",
+        "package.json",
+        "package-lock.json",
+        "poetry.lock",
+        "pipfile",
+        "pipfile.lock",
+    }
+
+    dependency_paths: List[str] = []
+    source_items: List[Tuple[int, str]] = []
+    doc_paths: List[str] = []
 
     for item in files_index:
-        path = item["path"]
+        path = str(item.get("path", ""))
+        if not path:
+            continue
         lowered = path.lower()
+        size = int(item.get("size", 0) or 0)
 
-        is_dependency = lowered in {
-            "requirements.txt",
-            "pyproject.toml",
-            "package.json",
-            "package-lock.json",
-            "poetry.lock",
-            "pipfile",
-            "pipfile.lock",
-        }
+        is_dependency = lowered in dependency_names
         is_source = lowered.endswith((".py", ".js", ".ts", ".tsx", ".jsx"))
         is_doc = lowered in {"readme.md", "readme.rst", "readme.txt"} or lowered.endswith("/readme.md")
 
-        if is_source and source_count >= max_source_files:
-            continue
-        if is_doc and docs_count >= 2:
-            continue
+        if is_dependency:
+            dependency_paths.append(path)
+        if is_source:
+            # Prioritize smaller source files first to reduce latency on first response.
+            source_items.append((max(size, 0), path))
+        if is_doc:
+            doc_paths.append(path)
 
-        if is_dependency or is_source or is_doc:
-            content = fetch_file_content(owner, repo, path)
+    source_items.sort(key=lambda x: (x[0], x[1]))
+    selected_sources = [path for _, path in source_items[: max(0, int(max_source_files))]]
+    selected_docs = doc_paths[:2]
+
+    selected_paths: List[str] = []
+    seen = set()
+    for path in dependency_paths + selected_docs + selected_sources:
+        if path in seen:
+            continue
+        selected_paths.append(path)
+        seen.add(path)
+
+    if not selected_paths:
+        return {}
+
+    max_workers = min(8, max(1, len(selected_paths)))
+    resolved: Dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(fetch_file_content, owner, repo, path): path for path in selected_paths}
+        for future in as_completed(futures):
+            path = futures[future]
+            try:
+                content = future.result()
+            except Exception:
+                content = ""
             if content:
-                file_map[path] = content
-                if is_source:
-                    source_count += 1
-                if is_doc:
-                    docs_count += 1
+                resolved[path] = content
+
+    # Preserve deterministic order for downstream display/reporting.
+    file_map: Dict[str, str] = {}
+    for path in selected_paths:
+        if path in resolved:
+            file_map[path] = resolved[path]
 
     return file_map
 

@@ -45,6 +45,8 @@ class DevPulseState(TypedDict, total=False):
     route_code_quality: bool
     route_dependency: bool
     route_git_history: bool
+    routing_decision: List[str]
+    routing_plan: List[Dict[str, Any]]
 
     code_quality_result: AgentResult
     dependency_result: AgentResult
@@ -67,6 +69,7 @@ class DevPulseState(TypedDict, total=False):
     warnings: List[str]
     model_usage: List[Dict[str, Any]]
     run_trace: Annotated[List[Dict[str, Any]], add]
+    meta_loop_trace: List[Dict[str, Any]]
 
 
 def default_state(repo_url: str, scan_depth: int = 30) -> DevPulseState:
@@ -92,10 +95,13 @@ def default_state(repo_url: str, scan_depth: int = 30) -> DevPulseState:
         route_code_quality=False,
         route_dependency=False,
         route_git_history=False,
+        routing_decision=[],
+        routing_plan=[],
         errors=[],
         warnings=[],
         model_usage=[],
         run_trace=[],
+        meta_loop_trace=[],
         chat_history=[],
         pr_dependency_delta={"added": [], "removed": [], "vulnerable_added": []},
         pr_risk_summary={},

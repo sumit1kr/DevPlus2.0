@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 from tools.llm_router import LLMRouter
+from tools.scoring import SCORE_WEIGHTS, compute_weighted_base
 
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -203,8 +204,21 @@ def _health_score_breakdown(state: dict) -> str:
     code = int(sb.get("code_quality", 0))
     dep = int(sb.get("dependency", 0))
     git = int(sb.get("git_history", 0))
+    sec = int(sb.get("security", 0))
 
-    weighted_base = int(round(code * 0.45 + dep * 0.35 + git * 0.20))
+    weighted_base = int(
+        sb.get(
+            "weighted_base",
+            compute_weighted_base(
+                {
+                    "code_quality": code,
+                    "dependency": dep,
+                    "git_history": git,
+                    "security": sec,
+                }
+            ),
+        )
+    )
     penalty_missing = int(sb.get("penalty_missing_tests", 0))
     penalty_critical = int(sb.get("penalty_critical_vulnerabilities", 0))
     penalty_stale = int(sb.get("penalty_stale_commit_activity", 0))
@@ -218,9 +232,10 @@ def _health_score_breakdown(state: dict) -> str:
         "This section explains how the final health score was composed.\n\n"
         "| Area | Score | Weight | Status |\n"
         "|---|---:|---:|---|\n"
-        f"| Code Quality | {code}/100 | 45% | {_score_label(code)} |\n"
-        f"| Dependency Risk | {dep}/100 | 35% | {_score_label(dep)} |\n"
-        f"| Git Health | {git}/100 | 20% | {_score_label(git)} |\n\n"
+        f"| Code Quality | {code}/100 | {int(SCORE_WEIGHTS['code_quality'] * 100)}% | {_score_label(code)} |\n"
+        f"| Dependency Risk | {dep}/100 | {int(SCORE_WEIGHTS['dependency'] * 100)}% | {_score_label(dep)} |\n"
+        f"| Git Health | {git}/100 | {int(SCORE_WEIGHTS['git_history'] * 100)}% | {_score_label(git)} |\n"
+        f"| Security | {sec}/100 | {int(SCORE_WEIGHTS['security'] * 100)}% | {_score_label(sec)} |\n\n"
         f"**Weighted Base Score:** **{weighted_base}/100**\n\n"
         f"- Missing tests penalty: **{penalty_missing}**\n"
         f"- Critical vulnerabilities penalty: **{penalty_critical}**\n"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict
 
 from state.state import DevPulseState
@@ -161,6 +162,7 @@ def _run_fetcher_pr_mode(state: DevPulseState, trace: TraceLogger) -> DevPulseSt
     head_dep_files: dict[str, str] = {}
     base_dep_files: dict[str, str] = {}
 
+    fetch_jobs: list[tuple[str, str, str]] = []
     for item in changed_files:
         path = str(item.get("path", ""))
         if not path:
@@ -175,18 +177,35 @@ def _run_fetcher_pr_mode(state: DevPulseState, trace: TraceLogger) -> DevPulseSt
 
         status = str(item.get("status", "modified"))
         if status != "removed" and head_sha:
-            trace.add_tool_call("fetch_file_content_at_ref", {"path": path, "ref": head_sha})
-            head_content = fetch_file_content_at_ref(owner, repo, path, head_sha)
-            if head_content:
-                fetched_files[path] = head_content
-                if is_dep:
-                    head_dep_files[path] = head_content
+            fetch_jobs.append(("head", path, head_sha))
 
         if is_dep and base_sha:
-            trace.add_tool_call("fetch_file_content_at_ref", {"path": path, "ref": base_sha})
-            base_content = fetch_file_content_at_ref(owner, repo, path, base_sha)
-            if base_content:
-                base_dep_files[path] = base_content
+            fetch_jobs.append(("base", path, base_sha))
+
+    if fetch_jobs:
+        trace.add_tool_call("fetch_file_content_at_ref", {"requests": len(fetch_jobs)})
+        max_workers = min(8, len(fetch_jobs))
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(fetch_file_content_at_ref, owner, repo, path, ref): (kind, path)
+                for kind, path, ref in fetch_jobs
+            }
+            for future in as_completed(futures):
+                kind, path = futures[future]
+                try:
+                    content = future.result()
+                except Exception:
+                    content = ""
+                if not content:
+                    continue
+
+                if kind == "head":
+                    fetched_files[path] = content
+                    lowered = path.lower()
+                    if lowered.endswith(dep_suffixes):
+                        head_dep_files[path] = content
+                elif kind == "base":
+                    base_dep_files[path] = content
 
     t4 = time.perf_counter()
 
