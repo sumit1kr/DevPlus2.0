@@ -1,5 +1,4 @@
-# Title
-DevPulse - Multi-Agent Code Review System (Option B)
+# DevPulse - Multi-Agent Code Review System (Option B)
 
 ## Overview
 DevPulse analyzes a GitHub repository or pull request and produces a structured technical health report.
@@ -140,8 +139,7 @@ Refinement is heuristic-driven (based on coverage/warnings), not LLM planning.
 
 ## How to Run
 ```bash
-git clone <your-repo-url>
-cd lumiq
+git clone https://github.com/sumit1kr/DevPlus2.0
 python -m venv .venv
 ```
 
